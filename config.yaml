@@ -1,0 +1,42 @@
+# ============================================================================
+# SOC Anomaly Detector — Global Configuration
+# ============================================================================
+pipeline:
+  default_contamination: 0.05
+  ensemble_weights:
+    isolation_forest: 0.6
+    autoencoder: 0.4
+  threshold_method: mad            # mad | quantile
+  mad_multiplier: 2.5
+  severity_thresholds: [0.5, 0.7, 0.9]   # -> low / medium / high / critical
+
+features:
+  off_hours_hours: [22, 23, 0, 1, 2, 3, 4, 5, 6]
+  rolling_windows_seconds: [60, 900, 3600]
+  fanout_window_hours: 1
+  max_window_entries: 2000
+
+models:
+  default_model_path: models/soc_ensemble.joblib
+  if_estimators: 200
+  ae_hidden_layers: [32, 16, 8]
+  ae_alpha: 0.0001
+
+agent:
+  default_ollama_url: http://localhost:11434/api/generate
+  default_ollama_model: llama3.2
+  default_timeout_sec: 120
+  max_response_tokens: 2048
+  temperature: 0.05
+  kb_path: data/mitre_kb.json
+
+reporters:
+  json_path: triaged_incidents.json
+  html_path: reports/soc_triage_report.html
+  html_dark_mode: true
+  max_incidents_table: 50
+
+simulate:
+  days: 7
+  benign_count: 1200
+  seed: 42

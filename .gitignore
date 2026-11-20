@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Generated artifacts (keep the tree clean; CI/artifacts store releases)
+models/*.joblib
+reports/
+triaged_incidents.json
+simulated_soc_logs.jsonl
+logs/
+# macOS
+.DS_Store
