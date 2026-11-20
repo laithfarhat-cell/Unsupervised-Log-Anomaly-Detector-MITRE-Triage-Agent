@@ -1,0 +1,59 @@
+# ============================================================================
+# Production-style stack:
+#   soc-triage    - detection + triage engine (this repo)
+#   ollama        - local LLM server for MITRE triage (air-gapped)
+#   ollama-puller - pre-pulls the triage model (one-shot)
+#
+# First run:  docker compose up --build ollama-puller soc-triage
+# Watch it:   docker compose logs -f soc-triage
+# Artifacts land in the mounted ./models, ./reports, ./data, ./logs dirs.
+# ============================================================================
+services:
+  soc-triage:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_started
+    volumes:
+      - ./models:/app/models
+      - ./reports:/app/reports
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command:
+      - hunt
+      - -i
+      - logs/simulated_soc_logs.jsonl
+      - --model
+      - models/soc_ensemble.joblib
+      - --ollama-url
+      - http://ollama:11434/api/generate
+      - --ollama-model
+      - llama3.2
+      - --html
+      - reports/soc_triage_report.html
+    restart: "no"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    # Optional GPU acceleration (uncomment if the host has an NVIDIA GPU):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  ollama-puller:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    command:
+      - pull
+      - llama3.2
+    restart: "no"

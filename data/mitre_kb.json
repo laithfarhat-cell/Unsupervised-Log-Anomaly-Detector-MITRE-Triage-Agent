@@ -1,0 +1,292 @@
+{
+  "version": "1.0.0",
+  "description": "Curated MITRE ATT&CK knowledge base for the deterministic offline triage fallback of the SOC anomaly detector (used when the local LLM is unavailable).",
+  "techniques": [
+    {
+      "technique_id": "T1059.001",
+      "tactic_id": "TA0002",
+      "tactic_name": "Execution",
+      "technique_name": "PowerShell",
+      "confidence": "high",
+      "indicators": [
+        "powershell",
+        "powershell.exe",
+        "-enc",
+        "encodedcommand",
+        "downloadstring",
+        "invoke-expression",
+        "iex ",
+        "-nop",
+        "-noninteractive",
+        "amsi bypass",
+        "invoke-webrequest"
+      ],
+      "narrative_template": "The process lineage {parent_name} -> {child_name} on {host} executed PowerShell ('{cmd}') for {entity}; encoded command lines, staged downloads via Invoke-Expression/DownloadString or AMSI bypass patterns are characteristic of {actor}.",
+      "containment_steps": [
+        "Isolate host {host} from the network and suspend non-essential services for {entity}.",
+        "Terminate the PowerShell process tree: review process=\"powershell.exe\" descendants of {parent_name} for this session (anomaly_id: {anomaly_id}).",
+        "Remove staged artifacts: check C:\\\\Windows\\\\Temp, %TEMP%, and the user Downloads/AppData folders for files written in the last 24 hours.",
+        "Check execution policy and script allowlists: Get-ExecutionPolicy must not be bypassed in production; enable logging of PowerShell command lines (ModuleLogging/ScriptBlockLogging).",
+        "Triage with SIEM: search process=\"powershell\" AND host=\"{host}\" AND user=\"{user}\"."
+      ],
+      "hunting_queries": [
+        "search: process=\"powershell.exe\" AND host=\"{host}\" AND user=\"{user}\"",
+        "search: command_line contains \"-enc\" OR command_line contains \"DownloadString\"",
+        "search: process=\"powershell\" AND user=\"{user}\"",
+        "search: destination_ip=\"{destination_ip}\" AND process=\"*powershell*\"",
+        "search: (anomaly_id=\"{anomaly_id}\") AND (entity=\"{entity}\")"
+      ]
+    },
+    {
+      "technique_id": "T1059.004",
+      "tactic_id": "TA0002",
+      "tactic_name": "Execution",
+      "technique_name": "Unix Shell",
+      "confidence": "high",
+      "indicators": [
+        "shell spawn",
+        "bash -c",
+        "sh -c",
+        "sudo bash",
+        "pipe to shell",
+        "base64 -d",
+        "cron command",
+        "wget download",
+        "curl download",
+        "script execution"
+      ],
+      "narrative_template": "The parent process {parent_name} on {host} spawned {child_name} ('{cmd}') running a Unix shell for {entity}; scripted execution via pipes, downloads or cron patterns matches {actor}.",
+      "containment_steps": [
+        "Isolate {host} and terminate anomalous shell sessions for {entity}.",
+        "Check cron tables and systemd timers for new/modified entries (anomaly_id: {anomaly_id}).",
+        "Search /etc/cron.d, /var/spool/cron, and /etc/systemd/system for artifacts written in the last 24 hours.",
+        "Audit home directory and /tmp for new executable scripts.",
+        "Search SIEM: process=\"bash\" AND host=\"{host}\"."
+      ],
+      "hunting_queries": [
+        "search: process=\"bash\" AND command_line=\"-c\" AND host=\"{host}\"",
+        "search: process=\"curl\" OR process=\"wget\"",
+        "search: process=\"cron\" AND host=\"{host}\""
+      ]
+    },
+    {
+      "technique_id": "T1105",
+      "tactic_id": "TA0012",
+      "tactic_name": "Defense Evasion",
+      "technique_name": "Ingress Tool Transfer",
+      "confidence": "medium",
+      "indicators": [
+        "curl download",
+        "wget download",
+        "ftp download",
+        "powershell downloadstring",
+        "certutil",
+        "bitsadmin",
+        "git clone",
+        "remote tool transfer"
+      ],
+      "narrative_template": "A remote transfer was observed from {parent_name} on {host} for {entity} ('{cmd}'); the source or staging path pattern matches {actor}.",
+      "containment_steps": [
+        "Block the source endpoint: firewall rules for {host}; review egress destinations (source_ip={source_ip}).",
+        "Quarantine files in /tmp, $HOME, /var/tmp written since the alert (anomaly_id: {anomaly_id}).",
+        "Search for unexpected binaries in PATH directories and application folders.",
+        "Triage: search: destination_ip=\"{destination_ip}\" AND process=\"*curl*\" AND host=\"{host}\"."
+      ],
+      "hunting_queries": [
+        "search: process=\"curl\" OR process=\"wget\"",
+        "search: process=\"*certutil*\" OR process=\"*bitsadmin*\"",
+        "search: command_line contains \"*| sh\" OR command_line contains \"| bash\""
+      ]
+    },
+    {
+      "technique_id": "T1003",
+      "tactic_id": "TA0006",
+      "tactic_name": "Credential Access",
+      "technique_name": "OS Credential Dumping",
+      "confidence": "high",
+      "indicators": [
+        "hashcat",
+        "john",
+        "mimikatas",
+        "dump credentials",
+        "lsass",
+        "sam hive",
+        "ntds.dit",
+        "shadow file",
+        "credential dumping",
+        "proc dump"
+      ],
+      "narrative_template": "{parent_name} on {host} executed {child_name} ('{cmd}') to dump credentials for {entity}; process lineage or tool fingerprint matches {actor}.",
+      "containment_steps": [
+        "Isolate {host} immediately — disable network access for {entity}.",
+        "Rotate all credentials and reset passwords used on or targeting {host}.",
+        "Audit logon sessions: review Event 4624 (success) and 4768/4769 (kerberos) events.",
+        "Triage: search process=\"hashcat\" OR process=\"john\" OR process=\"mimikatas\" AND host=\"{host}\"."
+      ],
+      "hunting_queries": [
+        "search: process=\"hashcat\" OR process=\"john\" OR process=\"mimikatas\"",
+        "search: process=\"*proc*\" AND target_user=\"{user}\"",
+        "search: file_modifier=\"/etc/shadow\" OR file_modifier=\"/etc/passwd\""
+      ]
+    },
+    {
+      "technique_id": "T1110.003",
+      "tactic_id": "TA0006",
+      "tactic_name": "Credential Access",
+      "technique_name": "Password Spraying",
+      "confidence": "medium",
+      "indicators": [
+        "password spraying",
+        "spraying",
+        "multiple failed logins",
+        "bad password",
+        "lockout risk",
+        "auth failure",
+        "account lockout",
+        "dictionary attack"
+      ],
+      "narrative_template": "Repeated authentication failures for {entity} (anomaly_id: {anomaly_id}) at {host}; the pattern of many accounts/ports with common passwords matches {actor}.",
+      "containment_steps": [
+        "Block the source IPs at the firewall: {source_ip} and surrounding range.",
+        "Check and rotate weak credentials for {entity}.",
+        "Review account lockouts: enable and verify multi-factor authentication where applicable.",
+        "Triage: search action=\"failure\" AND user=\"{entity}\""
+      ],
+      "hunting_queries": [
+        "search: action=\"failure\" AND user=\"{user}\" AND host=\"{host}\"",
+        "search: (source_ip=\"{source_ip}\") AND (user=\"{entity}\")",
+        "search: failed auth attempts > 15 per minute for host=\"{host}\""
+      ]
+    },
+    {
+      "technique_id": "T1110.004",
+      "tactic_id": "TA0006",
+      "tactic_name": "Credential Access",
+      "technique_name": "Credential Stuffing",
+      "confidence": "medium",
+      "indicators": [
+        "credential stuffing",
+        "leaked credentials",
+        "compromised credentials",
+        "credential batch"
+      ],
+      "narrative_template": "{parent_name} on {host} attempted to authenticate {entity} with a batch of credential pairs ('{cmd}'); the volume pattern matches {actor}.",
+      "containment_steps": [
+        "Disable the affected accounts or rotate their passwords immediately.",
+        "Monitor subsequent logins (Event 4624) from source_ip={source_ip}.",
+        "Check for lateral movement: search action=\"success\" AND source_ip=\"{source_ip}\" AND host!=\"{host}\"."
+      ],
+      "hunting_queries": [
+        "search: action=\"failure\" AND (source_ip=\"{source_ip}\")",
+        "search: user=\"{user}\" AND (host!=\"{host}\")"
+      ]
+    },
+    {
+      "technique_id": "T1021.004",
+      "tactic_id": "TA0008",
+      "tactic_name": "Lateral Movement",
+      "technique_name": "SSH",
+      "confidence": "high",
+      "indicators": [
+        "ssh -o",
+        "ssh to new host",
+        "ssh connection",
+        "remote ssh",
+        "ssh key auth",
+        "strict host key checking",
+        "sshd session opened",
+        "ssh tunnel"
+      ],
+      "narrative_template": "{entity} initiated an SSH session from {host} to {destination_ip}; the new host pair and non-interactive flags match {actor}.",
+      "containment_steps": [
+        "Review authorized_keys for {entity} on {destination_ip}.",
+        "Enable MFA/pubkey-only logins for {entity}.",
+        "Audit source_ip={source_ip} sessions for anomalous command chains.",
+        "Triage: search process=\"ssh\" AND destination_ip=\"{destination_ip}\""
+      ],
+      "hunting_queries": [
+        "search: process=\"sshd\" AND action=\"session_opened\" AND host=\"{destination_ip}\"",
+        "search: process=\"ssh\" AND destination_ip=\"{destination_ip}\""
+      ]
+    },
+    {
+      "technique_id": "T1566.001",
+      "tactic_id": "TA0001",
+      "tactic_name": "Initial Access",
+      "technique_name": "Spearphishing Attachment",
+      "confidence": "medium",
+      "indicators": [
+        "malicious attachment",
+        "spearphishing attachment",
+        "macro",
+        "vba",
+        "docm",
+        "xlsm",
+        "exe attachment",
+        "attachment open",
+        "attachment type docx"
+      ],
+      "narrative_template": "User {entity} on {host} opened or was prompted to open {cmd}; macro-bearing or obfuscated attachment handling matches {actor}.",
+      "containment_steps": [
+        "Quarantine the document and remove any staged payloads written by the user.",
+        "Scan the user's home directory and Downloads for executable artifacts.",
+        "Increase mailbox protections: enable ATP/SafeLinks-style scanning.",
+        "Triage: search user=\"{user}\" AND file_type in (\"docx\",\"docm\",\"xlsx\",\"xlsm\",\"zip\")"
+      ],
+      "hunting_queries": [
+        "search: file_modifier=\"*macro\" OR file_name=\"*.docm\"",
+        "search: process=\"powershell\" AND user=\"{user}\""
+      ]
+    },
+    {
+      "technique_id": "T1078.003",
+      "tactic_id": "TA0003",
+      "tactic_name": "Persistence",
+      "technique_name": "Valid Accounts — Local Accounts",
+      "confidence": "medium",
+      "indicators": [
+        "local account",
+        "account created",
+        "useradd",
+        "usermod",
+        "service account",
+        "admin account created"
+      ],
+      "narrative_template": "An unexpected local account operation for {entity} on {host} ('{cmd}') aligns with {actor}.",
+      "containment_steps": [
+        "Disable newly created local accounts: review /etc/passwd entries created in the last 48 hours.",
+        "Enforce central account management (SSSD/LDAP) for interactive logins.",
+        "Check for scheduled tasks or services running as the new account."
+      ],
+      "hunting_queries": [
+        "search: process=\"useradd\" OR process=\"usermod\"",
+        "search: user=\"{user}\" AND action=\"account_created\""
+      ]
+    },
+    {
+      "technique_id": "T1078.004",
+      "tactic_id": "TA0003",
+      "tactic_name": "Persistence",
+      "technique_name": "Valid Accounts — Cloud Accounts",
+      "confidence": "low",
+      "indicators": [
+        "cloud credential",
+        "aws access key",
+        "iam role",
+        "azure ad",
+        "service principal",
+        "cloud account takeover"
+      ],
+      "narrative_template": "Anomalous cloud credential usage on {entity} (host={host}) matches {actor}.",
+      "containment_steps": [
+        "Rotate the affected cloud credentials immediately.",
+        "Enable MFA and review IAM roles for privilege escalation.",
+        "Search SIEM for successful logins from source_ip={source_ip} in the last 24h."
+      ],
+      "hunting_queries": [
+        "search: (source_ip=\"{source_ip}\") AND provider=\"cloud\"",
+        "search: user=\"{entity}\" AND event.dataset=\"cloud.authentication\""
+      ]
+    }
+  ]
+}
